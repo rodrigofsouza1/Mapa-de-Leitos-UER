@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa UER — HC UNICAMP</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:#151b2e;color:#e8eaf0;min-height:100vh}
+
+/* HEADER */
+header{background:linear-gradient(135deg,#0d1117,#1a2744);padding:0.9rem 1.5rem;
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;
+  border-bottom:2px solid #2e4a7a;box-shadow:0 2px 12px rgba(0,0,0,0.4)}
+header h1{font-size:1.2rem;color:#7eb8f7}
+header h1 span{color:#fff;font-weight:700}
+.header-right{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+#sync-status{display:flex;align-items:center;gap:0.5rem;font-size:0.78rem;color:#8899aa;
+  background:#111827;padding:0.4rem 0.8rem;border-radius:20px;border:1px solid #2a3a50}
+#sync-dot{width:8px;height:8px;border-radius:50%;background:#555;transition:background 0.3s}
+#sync-dot.ok{background:#27ae60;box-shadow:0 0 6px #27ae60}
+#sync-dot.loading{background:#f39c12;animation:pulse 1s infinite}
+#sync-dot.error{background:#e74c3c}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+#btn-connect{background:linear-gradient(135deg,#1a5276,#2e86c1);color:#fff;border:none;
+  padding:0.45rem 1rem;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600}
+#btn-connect.connected{background:linear-gradient(135deg,#1e8449,#27ae60)}
+
+/* DASHBOARD */
+#dashboard{display:flex;justify-content:center;gap:0.75rem;padding:0.7rem 1.5rem;
+  flex-wrap:wrap;background:#111827;border-bottom:1px solid #1e2d44}
+.stat{background:#1a2035;border-radius:8px;padding:0.55rem 1rem;text-align:center;
+  min-width:100px;border-top:3px solid #333}
+.stat.total{border-top-color:#5b9bd5}.stat.ocup{border-top-color:#27ae60}
+.stat.livre{border-top-color:#566573}.stat.iso{border-top-color:#00bcd4}
+.stat.tbc{border-top-color:#e74c3c}.stat.multi{border-top-color:#555}
+.stat.porta-stat{border-top-color:#f39c12}
+.stat-n{display:block;font-size:1.5rem;font-weight:700}
+.stat-l{font-size:0.7rem;color:#778899}
+
+/* LEGENDA */
+#legend{display:flex;justify-content:center;gap:1rem;padding:0.45rem 1rem;
+  flex-wrap:wrap;background:#0d1117;border-bottom:1px solid #1e2d44;font-size:0.73rem}
+.leg{display:flex;align-items:center;gap:0.3rem}
+.leg-dot{width:15px;height:15px;border-radius:3px;flex-shrink:0}
+
+/* TIMER */
+#timer-bar{height:3px;background:#1e2d44}
+#timer-fill{height:100%;background:linear-gradient(90deg,#1a5276,#2e86c1);
+  width:100%;transition:width 1s linear}
+
+/* LAYOUT GLOBAL */
+#page-body{display:flex;gap:0;min-height:calc(100vh - 200px)}
+
+/* PAINEL PORTA — lateral esquerda fixa */
+#painel-porta{
+  width:220px;min-width:200px;flex-shrink:0;
+  background:#0d1117;border-right:1px solid #1e2d44;
+  padding:0.8rem 0.7rem;overflow-y:auto;
+  position:sticky;top:0;height:calc(100vh - 180px);
+}
+#painel-porta h3{font-size:0.72rem;font-weight:700;color:#f39c12;
+  letter-spacing:0.08em;text-transform:uppercase;margin-bottom:0.6rem;
+  border-bottom:1px solid #2a2000;padding-bottom:0.3rem}
+.porta-agenda-grupo{margin-bottom:0.8rem}
+.porta-agenda-label{font-size:0.63rem;font-weight:700;color:#7eb8f7;
+  letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.3rem;
+  background:#0a1828;padding:0.15rem 0.4rem;border-radius:3px;display:inline-block}
+.porta-paciente{padding:0.3rem 0.4rem;border-radius:4px;margin-bottom:0.2rem;
+  background:#111827;border-left:2px solid #f39c12;font-size:0.72rem}
+.porta-nome{font-weight:600;color:#e8eaf0;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;max-width:190px}
+.porta-hc{font-size:0.62rem;color:#556677}
+.porta-empty{font-size:0.72rem;color:#334455;font-style:italic;margin-top:0.5rem}
+#porta-count{font-size:0.65rem;color:#665500;margin-bottom:0.5rem}
+
+/* ÁREA DO MAPA */
+#main{flex:1;padding:0.8rem 1rem 2rem;overflow-x:auto;min-width:0}
+
+/* MAPA UER */
+#uer-map{background:#0e1420;border:2px solid #2a3a50;border-radius:12px;
+  padding:1rem;min-width:820px}
+.map-title{text-align:center;color:#3a5a7a;font-size:0.65rem;font-weight:700;
+  letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.8rem}
+
+/* GRID PRINCIPAL — fiel à planta UER
+   5 colunas:
+   [ped] [consultorios+posto] [amarela] [azul+emergs] [laranja]
+*/
+#uer-grid{
+  display:grid;
+  /* 3 colunas: [ped+espera(145)] [centro(1fr)] [laranja(150)] */
+  grid-template-columns: 145px 1fr 150px;
+  grid-template-rows: auto auto auto;
+  gap:7px;
+}
+/* col1: ped(row1) + espera(rows2-4, tamanho original) */
+.wrap-ped    {grid-column:1/2;grid-row:1/2}
+.wrap-espera {grid-column:1/2;grid-row:2/5}
+/* col2 row1: ortopedia+posto+amarela */
+.wrap-row1centro {grid-column:2/3;grid-row:1/2;display:flex;flex-direction:row;gap:6px}
+/* col2 row2: verde */
+.wrap-verde  {grid-column:2/3;grid-row:2/3}
+/* col2 row3: azul + emergs + admin — todos na mesma linha */
+.wrap-row3centro {grid-column:2/3;grid-row:3/4;display:flex;flex-direction:row;gap:6px}
+.wrap-azul   {flex:1;display:flex;flex-direction:column;gap:6px}
+.wrap-emergs {flex:0 0 250px;display:flex;flex-direction:column;gap:6px}
+.wrap-admin  {flex:0 0 120px}
+/* col3 rows1-3: laranja (reduzida) */
+.wrap-laranja{grid-column:3/4;grid-row:1/4;display:flex;flex-direction:column;gap:6px}
+
+/* ALAS */
+.ala{border-radius:8px;padding:0.6rem 0.7rem;position:relative;background:#111827}
+.ala-title{font-size:0.63rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;
+  margin-bottom:0.5rem;display:flex;align-items:center;gap:0.35rem}
+.ala-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.ala-azul   {border:2px dashed #1e4a8a;background:#060d1a}
+.ala-verde  {border:1px solid #1a5229;background:#040d06}
+.ala-amarela{border:1px solid #5a4500;background:#0d0b00}
+.ala-laranja{border:1px solid #6a3200;background:#0e0700}
+.ala-iso    {border:2px solid #5a2a8a;background:#080312}
+.ala-ped    {border:1px solid #0a5a50;background:#020d0b}
+.ala-emerg  {border:1px solid #6a1a1a;background:#0d0303}
+.ala::before{content:'';position:absolute;inset:0;border-radius:8px;
+  background-image:linear-gradient(rgba(255,255,255,0.012) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(255,255,255,0.012) 1px,transparent 1px);
+  background-size:18px 18px;pointer-events:none}
+
+/* LEITOS — containers */
+.leitos-wrap{display:flex;flex-wrap:wrap;gap:5px}
+.s2-row{display:flex;flex-wrap:wrap;gap:5px}
+.s3-row{display:flex;gap:5px;margin-bottom:4px}
+.leitos-s4{display:flex;flex-direction:column;gap:10px}
+.leitos-s4-par{display:flex;gap:8px;padding:4px 6px;border-radius:5px;background:rgba(255,255,255,0.025)}
+.leitos-emerg-grid{display:grid;grid-template-columns:repeat(3,50px);gap:8px}
+
+
+
+
+
+/* Leito vertical — rotaciona o leito horizontal */
+.leito.vert-up, .leito.vert-dn{
+  width:50px;height:64px;
+  justify-content:center;
+  padding:2px;
+}
+.leito.vert-up::before{
+  transform:rotate(90deg);
+  transform-origin:center center;
+  top:6px;left:-2px;right:10px;bottom:6px;
+}
+.leito.vert-dn::before{
+  transform:rotate(-90deg);
+  transform-origin:center center;
+  top:6px;left:-2px;right:10px;bottom:6px;
+}
+/* Label vertical — texto de baixo para cima, na lateral direita */
+.leito.vert-up .leito-label,
+.leito.vert-dn .leito-label{
+  position:absolute;
+  right:1px;top:0;bottom:0;
+  width:12px;
+  display:flex;align-items:center;justify-content:center;
+  writing-mode:vertical-lr;
+  transform:rotate(180deg);
+  font-size:0.46rem;
+  white-space:nowrap;
+  line-height:1;
+  text-align:center;
+}
+/* warn fica no topo */
+.leito.vert-up .leito-warn,
+.leito.vert-dn .leito-warn{
+  top:2px;right:2px;font-size:0.55rem;
+}
+/* Área Sala de Espera — ilustrativa */
+.ala-espera{border:1px dashed #2a3a50;background:#060810;opacity:0.7}
+
+/* Área administrativa */
+.ala-admin{border:1px dashed #1a3050;background:#060a14;opacity:0.7}
+/* Consultórios porta */
+.ala-consult-porta{border:1px dashed #1a3a20;background:#060d08;opacity:0.8}
+.consult-grid{display:grid;gap:4px;margin-top:0.4rem}
+.consult-box{background:rgba(255,255,255,0.04);border:1px solid #1a2a1a;
+  border-radius:4px;display:flex;align-items:center;justify-content:center;
+  font-size:0.58rem;color:#2a5a30;font-weight:600;padding:0.3rem 0.2rem;text-align:center}
+
+.ala-ilustra{border:1px dashed #2a3a50;background:#07090f;opacity:0.75}
+.ilustra-icon{font-size:1.4rem;text-align:center;margin:0.4rem 0 0.2rem;opacity:0.35}
+.ilustra-label{font-size:0.58rem;color:#2a3a50;text-align:center;font-style:italic;line-height:1.3}
+.espera-icon{font-size:1.8rem;text-align:center;margin:0.5rem 0 0.25rem;opacity:0.3}
+.espera-label{font-size:0.6rem;color:#2a3a50;text-align:center;font-style:italic}
+
+/* LEITO */
+.leito{width:56px;height:44px;border-radius:6px;display:flex;flex-direction:column;
+  align-items:center;justify-content:flex-end;font-size:0.53rem;font-weight:700;
+  color:#fff;cursor:default;position:relative;transition:transform 0.15s,box-shadow 0.15s;
+  border:2px solid transparent;overflow:hidden;text-align:center;padding:2px 2px 3px}
+.leito:hover{transform:scale(1.13);box-shadow:0 4px 14px rgba(0,0,0,0.6);z-index:20}
+.leito::before{content:'';position:absolute;top:2px;left:2px;right:2px;bottom:12px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 36'%3E%3Crect x='1' y='1' width='9' height='32' rx='3' fill='rgba(255,255,255,0.22)' stroke='rgba(255,255,255,0.35)' stroke-width='1'/%3E%3Crect x='12' y='6' width='47' height='26' rx='4' fill='rgba(255,255,255,0.15)' stroke='rgba(255,255,255,0.35)' stroke-width='1'/%3E%3Crect x='14' y='8' width='12' height='7' rx='2' fill='rgba(255,255,255,0.3)'/%3E%3Crect x='12' y='32' width='5' height='3' rx='1' fill='rgba(255,255,255,0.22)'/%3E%3Crect x='54' y='32' width='5' height='3' rx='1' fill='rgba(255,255,255,0.22)'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-size:contain;background-position:center;
+  opacity:0.85;pointer-events:none}
+.leito-label{position:relative;z-index:1;font-size:0.51rem;line-height:1.1;
+  text-shadow:0 1px 2px rgba(0,0,0,0.5)}
+.leito-warn{position:absolute;top:1px;right:2px;font-size:0.62rem;z-index:2}
+
+/* Status */
+.leito.livre    {background:#20283a;border-color:#2a3650;color:#4a5a6a}
+.leito.ocupado  {background:#1e6e3a;border-color:#27ae60}
+.leito.iso-unico{background:#006b7a;border-color:#00bcd4}
+.leito.tbc      {background:#7a1010;border-color:#e74c3c}
+.leito.multi    {background:#1a1a1a;border-color:#555;color:#aaa}
+.leito.extra    {background:#0d1520;border-color:#1a3050;border-style:dashed;color:#3a5570}
+
+
+/* MEWS — leitos piscando */
+@keyframes mews-pulse{
+  0%,100%{opacity:1;box-shadow:0 0 0 0 currentColor}
+  50%{opacity:0.75;box-shadow:0 0 8px 3px currentColor}
+}
+.leito.mews-alerta{animation:mews-pulse 1.4s ease-in-out infinite}
+.leito.mews-critico{animation:mews-pulse 0.7s ease-in-out infinite}
+
+
+/* FILTROS */
+#filtros-bar{display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;
+  padding:0.5rem 1rem;background:#0a1020;border-bottom:1px solid #1e2d44;font-size:0.75rem}
+.filtro-grupo{display:flex;align-items:center;gap:0.3rem}
+.filtro-grupo label{color:#6688aa;font-size:0.7rem;white-space:nowrap}
+.filtro-sel{background:#111827;border:1px solid #2a3a50;color:#e8eaf0;
+  padding:0.25rem 0.5rem;border-radius:5px;font-size:0.72rem}
+.filtro-sel:focus{outline:none;border-color:#2e86c1}
+
+/* TEMPO NA PORTA */
+.porta-paciente.porta-warn{border-left-color:#f39c12}
+.porta-paciente.porta-crit{border-left-color:#e74c3c;background:#1a0808}
+.porta-tempo{font-size:0.6rem;margin-top:0.1rem}
+.porta-tempo.warn{color:#f39c12}
+.porta-tempo.crit{color:#e74c3c;font-weight:700}
+
+/* ÍCONES NO LEITO (poltrona / consultório) */
+.leito-icon{position:absolute;top:1px;left:2px;font-size:0.6rem;z-index:2;line-height:1}
+
+/* TOOLTIP */
+#tooltip{position:fixed;background:#07101e;color:#e8eaf0;padding:0.8rem 1rem;
+  border-radius:8px;font-size:0.79rem;line-height:1.55;max-width:310px;
+  pointer-events:none;z-index:9999;box-shadow:0 4px 24px rgba(0,0,0,0.7);
+  border:1px solid #1e3050}
+#tooltip.hidden{display:none}
+#tooltip strong{color:#7eb8f7}
+.tt-row{margin-bottom:0.18rem}
+.tt-lbl{color:#6688aa}
+.tt-sep{border-top:1px solid #1a2a40;margin:0.3rem 0}
+.tt-badge{display:inline-block;padding:0.1rem 0.45rem;border-radius:3px;
+  font-size:0.67rem;font-weight:700;margin-top:0.1rem}
+.tt-agenda{font-size:0.95rem;font-weight:700;color:#7eb8f7}
+
+/* MODAL */
+#modal-auth{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);
+  z-index:10000;align-items:center;justify-content:center}
+#modal-auth.open{display:flex}
+.modal-box{background:#111827;border:1px solid #2a3a50;border-radius:12px;
+  padding:1.8rem;max-width:450px;width:90%}
+.modal-box h2{color:#7eb8f7;margin-bottom:0.4rem;font-size:1.05rem}
+.modal-box p{color:#8899aa;font-size:0.82rem;line-height:1.6;margin-bottom:0.8rem}
+.modal-input{width:100%;padding:0.55rem 0.75rem;background:#0d1117;border:1px solid #2a3a50;
+  border-radius:6px;color:#e8eaf0;font-size:0.82rem;margin-bottom:0.65rem}
+.modal-input:focus{outline:none;border-color:#2e86c1}
+.modal-btn-row{display:flex;gap:0.7rem;justify-content:flex-end}
+.modal-btn{padding:0.45rem 1.1rem;border-radius:6px;border:none;cursor:pointer;font-size:0.82rem;font-weight:600}
+.modal-btn.primary{background:#2e86c1;color:#fff}
+.modal-btn.secondary{background:#1e2d44;color:#8899aa}
+.modal-inst{background:#0a1020;border:1px solid #1e2d44;border-radius:6px;
+  padding:0.65rem;font-size:0.73rem;color:#6688aa;line-height:1.7;margin-bottom:0.7rem}
+.modal-inst code{background:#1a2535;padding:0.1rem 0.3rem;border-radius:3px;color:#7eb8f7;font-size:0.7rem}
+
+footer{text-align:center;padding:0.7rem;font-size:0.7rem;color:#445566;border-top:1px solid #1e2d44}
+</style>
+</head>
+<body>
+
+
+<!-- TELA DE LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">🏥</div>
+    <div class="login-title">Mapa UER — HC UNICAMP</div>
+    <div class="login-sub">Acesso restrito a profissionais autorizados</div>
+    <input class="login-input" id="login-pass" type="password"
+      placeholder="••••••••" autocomplete="off"
+      onkeydown="if(event.key==='Enter') tentarLogin()"/>
+    <button class="login-btn" onclick="tentarLogin()">Entrar</button>
+    <div class="login-error" id="login-error"></div>
+    <div class="login-footer">HC UNICAMP © 2026 — Uso interno</div>
+  </div>
+</div>
+<header>
+  <h1>🏥 <span>UER</span> — HC UNICAMP &nbsp;·&nbsp; Mapa de Leitos</h1>
+  <div class="header-right">
+    <div id="sync-status"><div id="sync-dot"></div><span id="sync-text">Não conectado</span></div>
+    <button id="btn-connect" onclick="openAuthModal()">🔑 Conectar Google Sheets</button>
+  </div>
+</header>
+
+<div id="timer-bar"><div id="timer-fill"></div></div>
+
+<div id="dashboard">
+  <div class="stat total"><span class="stat-n" id="s-total">0</span><span class="stat-l">Total leitos</span></div>
+  <div class="stat ocup" ><span class="stat-n" id="s-ocup">0</span><span class="stat-l">Ocupados</span></div>
+  <div class="stat livre"><span class="stat-n" id="s-livre">0</span><span class="stat-l">Livres</span></div>
+  <div class="stat iso"  ><span class="stat-n" id="s-iso">0</span><span class="stat-l">🩵 Iso. único</span></div>
+  <div class="stat tbc"  ><span class="stat-n" id="s-tbc">0</span><span class="stat-l">🔴 TBC</span></div>
+  <div class="stat multi"><span class="stat-n" id="s-multi">0</span><span class="stat-l">⚫ Multi-iso</span></div>
+  <div class="stat porta-stat"><span class="stat-n" id="s-porta">0</span><span class="stat-l">🚪 Porta</span></div>
+</div>
+
+<div id="legend">
+  <span class="leg"><span class="leg-dot" style="background:#1e6e3a;border:1px solid #27ae60"></span>Ocupado</span>
+  <span class="leg"><span class="leg-dot" style="background:#20283a;border:1px solid #2a3650"></span>Livre</span>
+  <span class="leg"><span class="leg-dot" style="background:#006b7a;border:1px solid #00bcd4"></span>Iso. único (KPC/VRE/NDM…)</span>
+  <span class="leg"><span class="leg-dot" style="background:#7a1010;border:1px solid #e74c3c"></span>TBC / Aerossóis</span>
+  <span class="leg"><span class="leg-dot" style="background:#1a1a1a;border:1px solid #555"></span>Multi-iso</span>
+  <span class="leg"><span class="leg-dot" style="background:#0d1520;border:2px dashed #1a3050"></span>Extra</span>
+</div>
+
+
+<div id="filtros-bar">
+  <span style="color:#445566;font-weight:700;font-size:0.7rem">Filtros:</span>
+  <div class="filtro-grupo">
+    <label>Agenda:</label>
+    <select class="filtro-sel" id="f-agenda" onchange="aplicarFiltros()">
+      <option value="">Todas</option>
+    </select>
+  </div>
+  <div class="filtro-grupo">
+    <label>Isolamento:</label>
+    <select class="filtro-sel" id="f-iso" onchange="aplicarFiltros()">
+      <option value="">Todos</option>
+      <option value="iso-unico">Iso. único</option>
+      <option value="tbc">TBC / Aerossóis</option>
+      <option value="multi">Multi-iso</option>
+      <option value="none">Sem isolamento</option>
+    </select>
+  </div>
+  <div class="filtro-grupo">
+    <label>VM/O₂:</label>
+    <select class="filtro-sel" id="f-vm" onchange="aplicarFiltros()">
+      <option value="">Todos</option>
+      <option value="sim">Com VM/O₂</option>
+    </select>
+  </div>
+  <button class="filtro-sel" onclick="limparFiltros()" style="cursor:pointer;background:#1a2535">✕ Limpar</button>
+</div>
+
+<div id="page-body">
+
+  <!-- PAINEL PORTA -->
+  <div id="painel-porta">
+    <h3>🚪 Pacientes na Porta</h3>
+    <div id="porta-count"></div>
+    <div id="porta-lista"><span class="porta-empty">Aguardando dados…</span></div>
+  </div>
+
+  <!-- MAPA -->
+  <div id="main">
+  <div id="uer-map">
+    <div class="map-title">■ Planta Esquemática UER — 2º Pavimento · HC UNICAMP</div>
+
+    <div id="uer-grid">
+
+      <!-- COL 1: Pediátrica (row1) + Sala Espera (rows 2-3) -->
+      <div class="wrap-ped">
+        <div class="ala ala-ped" style="height:100%">
+          <div class="ala-title" style="color:#1abc9c">
+            <span class="ala-dot" style="background:#1abc9c"></span>Obs. Pediátrica
+          </div>
+          <div class="leitos-wrap" id="leitos-ped"></div>
+          <div id="ped-info" style="font-size:0.6rem;color:#2a5a50;margin-top:0.4rem"></div>
+        </div>
+      </div>
+      <div class="wrap-espera">
+        <div class="ala ala-espera" style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div class="espera-icon">🚶🚶🚶</div>
+          <div class="ala-title" style="color:#2a3a50;justify-content:center;font-size:0.58rem">
+            <span class="ala-dot" style="background:#2a3a50"></span>Sala de Espera
+          </div>
+          <div class="espera-label">área ilustrativa</div>
+        </div>
+      </div>
+
+      <!-- ROW 1 CENTRO: Ortopedia + Posto (lado a lado) + Amarela -->
+      <div class="wrap-row1centro">
+        <!-- Ortopedia (menor) -->
+        <div class="ala ala-ilustra" style="flex:0 0 200px">
+          <div class="ilustra-icon" style="font-size:1rem">🦴</div>
+          <div class="ala-title" style="color:#2a3a50;justify-content:center;font-size:0.52rem;text-align:center">
+            <span class="ala-dot" style="background:#2a3a50"></span>Consultório Ortopédico
+          </div>
+        </div>
+        <!-- Posto de Enfermagem (maior) -->
+        <div class="ala ala-ilustra" style="flex:0 0 250px">
+          <div class="ilustra-icon" style="font-size:1rem">🏥</div>
+          <div class="ala-title" style="color:#2a3a50;justify-content:center;font-size:0.52rem;text-align:center">
+            <span class="ala-dot" style="background:#2a3a50"></span>Posto de Enfermagem
+          </div>
+        </div>
+        <!-- Amarela -->
+        <div class="wrap-amarela" style="flex:1">
+          <div class="ala ala-amarela" style="height:100%">
+            <div class="ala-title" style="color:#d4a017">
+              <span class="ala-dot" style="background:#d4a017"></span>Ala Amarela — Setor 3
+            </div>
+            <div class="s3-row" id="s3-row1"></div>
+            <div class="s3-row" id="s3-row2"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 2 CENTRO: Verde (largura total) -->
+      <div class="wrap-verde">
+        <div class="ala ala-verde" style="height:100%">
+          <div class="ala-title" style="color:#27ae60">
+            <span class="ala-dot" style="background:#27ae60"></span>Ala Verde — Setor 2
+          </div>
+          <div class="s2-row" id="s2-row1"></div>
+        </div>
+      </div>
+
+      <!-- ROW 3 CENTRO: Azul + Emergências + Admin -->
+      <div class="wrap-row3centro">
+        <div class="wrap-azul">
+          <div class="ala ala-azul" style="flex:7">
+            <div class="ala-title" style="color:#5b9bd5">
+              <span class="ala-dot" style="background:#5b9bd5;border:1px dashed #7eb8f7"></span>
+              Ala Azul — Setor 1
+              <span style="color:#2a4a6a;font-size:0.52rem;font-weight:400">(virtuais)</span>
+            </div>
+            <div class="leitos-wrap" id="leitos-azul"></div>
+          </div>
+          <div class="ala ala-consult-porta" style="flex:3">
+            <div class="ala-title" style="color:#2a6a30;font-size:0.6rem">
+              <span class="ala-dot" style="background:#2a6a30"></span>Consultórios Porta
+            </div>
+            <!-- C2,C4 na parede superior; C1,C3,C5,C6,C7 na parede inferior -->
+            <div style="display:flex;flex-direction:column;gap:3px;margin-top:0.3rem">
+              <div style="display:flex;flex-direction:row;gap:4px">
+                <div class="consult-box" style="width:44px;height:30px">C2</div>
+                <div class="consult-box" style="width:44px;height:30px">C4</div>
+                <div style="width:40px"></div>
+                <div style="width:40px"></div>
+                <div style="width:40px"></div>
+              </div>
+              <div style="display:flex;flex-direction:row;gap:4px">
+                <div class="consult-box" style="width:44px;height:30px">C1</div>
+                <div class="consult-box" style="width:44px;height:30px">C3</div>
+                <div class="consult-box" style="width:40px;height:30px">C5</div>
+                <div class="consult-box" style="width:40px;height:30px">C6</div>
+                <div class="consult-box" style="width:40px;height:30px">C7</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wrap-emergs">
+          <div class="ala ala-emerg" style="flex:1">
+            <div class="ala-title" style="color:#e74c3c;font-size:0.61rem">
+              <span class="ala-dot" style="background:#c0392b"></span>Emerg. 2 — Cirúrgica
+            </div>
+            <div id="leitos-emerg2"></div>
+          </div>
+          <div class="ala ala-emerg" style="flex:1">
+            <div class="ala-title" style="color:#e74c3c;font-size:0.61rem">
+              <span class="ala-dot" style="background:#c0392b"></span>Emerg. 1 — Clínica
+            </div>
+            <div id="leitos-emerg1"></div>
+          </div>
+        </div>
+        <!-- Admin — à frente da Emerg1, mesma linha -->
+        <div class="wrap-admin">
+          <div class="ala ala-admin" style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0.5rem">
+            <div style="font-size:1.1rem;opacity:0.3;text-align:center">🏢</div>
+            <div class="ala-title" style="color:#1a3050;justify-content:center;font-size:0.52rem;text-align:center;margin-top:0.2rem">
+              <span class="ala-dot" style="background:#1a3050"></span>Área Administrativa
+            </div>
+            <div class="ilustra-label">funcionários</div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- COL 3 rows1-3: Laranja -->
+      <div class="wrap-laranja">
+        <div class="ala ala-iso" style="padding:0.5rem 0.6rem">
+          <div class="ala-title" style="color:#a855f7;font-size:0.6rem">
+            <span class="ala-dot" style="background:#8e44ad"></span>Isolamento (A-B)
+          </div>
+          <div class="leitos-wrap" id="leitos-iso"></div>
+        </div>
+        <div class="ala ala-laranja" style="flex:1">
+          <div class="ala-title" style="color:#e8760a">
+            <span class="ala-dot" style="background:#e8760a"></span>Ala Laranja — Setor 4
+          </div>
+          <div class="leitos-s4" id="leitos-laranja"></div>
+        </div>
+      </div>
+
+
+
+    </div><!-- /uer-grid -->
+
+    <div style="text-align:right;font-size:0.6rem;color:#253545;margin-top:0.6rem;padding-right:0.3rem">
+      Última atualização: <span id="last-update">—</span> · Próxima em: <span id="next-update">—</span>
+    </div>
+  </div>
+  </div><!-- /main -->
+
+</div><!-- /page-body -->
+
+<footer>Mapa UER — HC UNICAMP © 2026 · Google Sheets (atualização a cada 15 min)</footer>
+<div id="tooltip" class="hidden"></div>
+
+<!-- MODAL -->
+<div id="modal-auth">
+  <div class="modal-box">
+    <h2>🔑 Conectar ao Google Sheets</h2>
+    <p>Insira sua API Key do Google Cloud com a Sheets API ativada.</p>
+    <div class="modal-inst">
+      1. Acesse <code>console.cloud.google.com</code><br>
+      2. Ative a <code>Google Sheets API</code><br>
+      3. Credenciais → Criar → Chave de API<br>
+      4. Compartilhe a planilha como "Qualquer pessoa com o link pode ver"
+    </div>
+    <input class="modal-input" id="input-apikey" type="password" placeholder="AIza..." autocomplete="off"/>
+    <div style="font-size:0.7rem;color:#445566;margin-bottom:0.7rem">Chave salva localmente neste navegador.</div>
+    <div class="modal-btn-row">
+      <button class="modal-btn secondary" onclick="closeAuthModal()">Cancelar</button>
+      <button class="modal-btn primary"   onclick="saveAndConnect()">🔗 Conectar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════
+const SHEET_ID   = '1RthkjF_kxah7I-j8mvutD8p3fusIvCxCTJ3gU1-Tf-E';
+const SHEET_NAME = 'ATUAL';
+const SHEET_CONT = 'Contagens';
+const RANGE      = 'A1:AH500';
+const RANGE_PED  = 'V2';
+const INTERVAL_MS= 15*60*1000;
+
+// Leitos fixos por área
+const FIXOS = {
+  azul:    ['SET1A','SET1B','SET1C','SET1D','SET1E','SET1F','SET1G','SET1H',
+            'SET1I','SET1J','SET1K','SET1L','SET1M','SET1N','SET1O','SET1P'],
+  verde:   ['SET2A','SET2B','SET2C','SET2D','SET2E','S2EXF'],
+  // Amarela — fileira 1: A-D; fileira 2: E(sob A), F(sob D)
+  amarela1:['SET3A','SET3B','SET3C','SET3D'],
+  amarela2:['S3EXE','S3EXF'],
+  iso:     ['SET4A','SET4B'],
+  laranja: ['SET4C','SET4D','SET4E','SET4F','SET4G','SET4H','SET4I','SET4J'],
+  emerg1:  ['EME1A','EME1B','E1EXC','E1EXD','E1EXE','E1EXF'],
+  emerg2:  ['EME2A','EME2B','E2EXC','E2EXD','E2EXE','E2EXF'],
+  ped:     ['PED1','PED2','PED3','PED4','PED5'],
+};
+
+// Todos os leitos fixos num Set para lookup rápido
+const TODOS_FIXOS = new Set(Object.values(FIXOS).flat());
+
+// Mapeamento de prefixo do leito → área
+function detectAreaByLeitoId(lid) {
+  const u = lid.toUpperCase();
+  if (u.startsWith('SET1')||u.startsWith('S1EX')) return 'azul';
+  if (u.startsWith('SET2')||u.startsWith('S2EX')) return 'verde';
+  if (u.startsWith('SET3')||u.startsWith('S3EX')) return 'amarela';
+  if (u==='SET4A'||u==='SET4B')                   return 'iso';
+  if (u.startsWith('SET4')||u.startsWith('S4EX')) return 'laranja';
+  if (u.startsWith('EME1')||u.startsWith('E1EX')) return 'emerg1';
+  if (u.startsWith('EME2')||u.startsWith('E2EX')) return 'emerg2';
+  if (u.startsWith('PED'))                         return 'ped';
+  return null;
+}
+
+// Parser da coluna ALA
+// Formatos: "SETOR 2 - INT LEITO: S2EXH", "SETOR 2 - INT UNF", "PORTA - ACAMADO: ..."
+function parseAla(row) {
+  const raw = (row['ala']||'').trim().toUpperCase();
+
+  // Detecta PORTA
+  if (raw.startsWith('PORTA')) return { area:'porta', leitoId:'' };
+
+  // Extrai ID do leito após "LEITO:" (pode não existir em INT UNF)
+  const lm = raw.match(/LEITO\s*:\s*(\S+)/i);
+  const leitoId = lm ? lm[1].toUpperCase() : '';
+
+  // Detecta área pelo ID do leito primeiro (mais confiável)
+  if (leitoId) {
+    const a = detectAreaByLeitoId(leitoId);
+    if (a) return { area: a, leitoId };
+  }
+
+  // Detecta setor pelo texto (cobre LEITO: e INT UNF)
+  const sm = raw.match(/^(SETOR\s*\d+|EMERG\s*\d+|EME\s*\d+|ISOLAMENTO|PEDIATRI)/i);
+  if (sm) {
+    const s = sm[1].toLowerCase().replace(/\s+/,'');
+    const map = {'setor1':'azul','setor2':'verde','setor3':'amarela','setor4':'laranja',
+                 'emerg1':'emerg1','emerg2':'emerg2','eme1':'emerg1','eme2':'emerg2',
+                 'isolamento':'iso','pediatri':'ped'};
+    const area = map[s]||'desconhecido';
+    // Para INT UNF sem ID de leito, gera ID baseado no nome do paciente
+    const idFinal = leitoId || ('UNF_'+(row['nome']||'').replace(/\s+/g,'_').substring(0,8).toUpperCase());
+    return { area, leitoId: idFinal };
+  }
+
+  return { area:'desconhecido', leitoId };
+}
+
+// Classificação de isolamento
+// Descritores genéricos que NÃO definem isolamento por si só (apenas complementam)
+// ── Classificação de isolamento ─────────────────────────────
+// Isolamentos respiratórios (aerossóis/gotículas) → classe TBC
+const ISO_RESP = [
+  'tuberculose','tbc','aerossol','aerossois',
+  'virus sincicial','sincicial','vsre','vsr',          // Bronquiolite/VSR
+  'bronquiolite',                                       // frequentemente VSR
+  'varicela','herpes zoster','zoster',                  // aerossóis
+  'sarampo','rubéola','rubeola','caxumba',
+  'influenza','gripe',                                  // gotículas
+  'covid','sars-cov','coronavirus',
+  'parainfluenza','metapneumovirus','metapneumo',
+  'adenovirus','rinovirus',
+];
+
+// KPC e sinônimos
+const KPC_QUAL = ['kpc','carbapenemase','carbapenem'];
+
+// Germes de contato com resistência — cada um = iso-unico
+const ISO_OUT = [
+  'ndm','imp','vim','vre','mrsa','esbl','oxa',
+  'pseudomonas','acinetobacter',
+  'staphylococcus aureus',   // sinônimo de MRSA no sistema HC
+  'clostridium','clostridioides','difficile', // C. diff
+];
+
+// Descritores genéricos que NÃO definem isolamento sozinhos
+const ISO_GENERICOS = [
+  'enterobacter','enterobacteria','klebsiella','escherichia',
+  'streptococcus','candida','fungo','staphylococcus coagulase',
+  'enterococcus',  // sinônimo de VRE — não conta como qualificador separado
+];
+
+function classifyIso(iso) {
+  if (!iso||!iso.trim()) return 'none';
+  let s = iso.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+
+  // Respiratório primeiro (mais restritivo)
+  if (ISO_RESP.some(k=>s.includes(k))) return 'tbc';
+
+  // Remove descritores genéricos do texto antes de contar qualificadores
+  // Isso evita que "enterococcus - VRE" conte como 2 hits
+  let sClean = s;
+  ISO_GENERICOS.forEach(g => { sClean = sClean.replace(new RegExp(g,'g'),''); });
+
+  // Qualificadores de contato/resistência no texto limpo
+  const isKPC  = KPC_QUAL.some(k=>sClean.includes(k));
+  const outros = ISO_OUT.filter(k=>sClean.includes(k));
+
+  const totalQual = (isKPC?1:0) + outros.length;
+  if (totalQual > 1) return 'multi';
+  if (totalQual === 1) return 'iso-unico';
+
+  // Isolamento declarado explicitamente sem germe específico
+  if (sClean.includes('contato')||sClean.includes('goticulas')||sClean.includes('precaucao')||
+      sClean.includes('droplet')||sClean.includes('airborne')||sClean.includes('isolamento')) return 'iso-unico';
+
+  return 'none';
+}
+
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+let apiKey = localStorage.getItem('uer_apikey')||'';
+// bedData: { leitoId → rowObj }
+let bedData  = {};
+// extrasPorArea: { area → [rowObj] } — leitos extras com dados mas sem ID fixo
+let extrasData = {};
+// portaData: [rowObj]
+let portaData = [];
+let pedCount  = 0;
+let timerInt  = null;
+let timerCountdown = 0;
+
+// ═══════════════════════════════════════════
+//  MODAL
+// ═══════════════════════════════════════════
+function openAuthModal()  { document.getElementById('modal-auth').classList.add('open') }
+function closeAuthModal() { document.getElementById('modal-auth').classList.remove('open') }
+function saveAndConnect() {
+  const k = document.getElementById('input-apikey').value.trim();
+  if (!k) { alert('Cole a API Key.'); return; }
+  apiKey = k; localStorage.setItem('uer_apikey',k);
+  closeAuthModal(); fetchAll();
+}
+
+// ═══════════════════════════════════════════
+//  FETCH
+// ═══════════════════════════════════════════
+function apiUrl(tab,rng){
+  return `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(tab+'!'+rng)}?key=${encodeURIComponent(apiKey)}`;
+}
+
+async function fetchAll() {
+  if (!apiKey) { setSyncStatus('error','Sem API Key'); return; }
+  setSyncStatus('loading','Atualizando…');
+  try {
+    const [rA,rC] = await Promise.all([
+      fetch(apiUrl(SHEET_NAME,RANGE)),
+      fetch(apiUrl(SHEET_CONT,RANGE_PED)),
+    ]);
+    const [jA,jC] = await Promise.all([rA.json(),rC.json()]);
+    if (jA.error) { setSyncStatus('error',jA.error.message); return; }
+
+    const rows = jA.values||[];
+    if (rows.length<2) { setSyncStatus('error','Sem dados'); return; }
+
+    // Normaliza headers
+    const hdrs = rows[0].map(h=>
+      h.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'_')
+    );
+
+    bedData = {}; extrasData = {}; portaData = [];
+
+    rows.slice(1).forEach(row=>{
+      if (!row[0]&&!row[1]) return;
+      const obj = {};
+      hdrs.forEach((h,i)=>obj[h]=(row[i]||'').trim());
+
+      const {area,leitoId} = parseAla(obj);
+      obj._area    = area;
+      obj._leitoId = leitoId;
+
+      if (area==='porta') {
+        portaData.push(obj);
+        return;
+      }
+      if (leitoId && TODOS_FIXOS.has(leitoId)) {
+        bedData[leitoId] = obj;
+      } else if (area && area!=='desconhecido') {
+        // Extra: tem área mas leito não é fixo (ou não tem ID)
+        if (!extrasData[area]) extrasData[area]=[];
+        extrasData[area].push(obj);
+      }
+    });
+
+    // Contagem pediátrica
+    pedCount = 0;
+    if (jC.values&&jC.values[0]&&jC.values[0][0])
+      pedCount = parseInt(jC.values[0][0])||0;
+
+    renderAll();
+    const tot = Object.keys(bedData).length + Object.values(extrasData).reduce((s,a)=>s+a.length,0);
+    // Debug: mostra colunas disponíveis no console para diagnóstico
+    if(Object.keys(bedData).length>0||extrasData){
+      const priRow=Object.values(bedData)[0]||Object.values(extrasData).flat()[0]||{};
+      console.log('[UER] Colunas disponíveis:', Object.keys(priRow).join(', '));
+      const isoKey=Object.keys(priRow).find(k=>
+        k==='isolamento'||(k.includes('isolamento')&&!k.includes('consultorio')&&!k.includes('setor'))
+      );
+      if(isoKey) console.log('[UER] Isolamento lido de:', isoKey, '→', priRow[isoKey]);
+      else console.warn('[UER] ⚠️ Coluna isolamento não encontrada. Colunas:', Object.keys(priRow).join(', '));
+    }
+    setSyncStatus('ok',`OK — ${tot} pacientes`);
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString('pt-BR');
+    startTimer();
+  } catch(e) { setSyncStatus('error','Erro: '+e.message); }
+}
+
+function setSyncStatus(state,msg){
+  document.getElementById('sync-dot').className=state;
+  document.getElementById('sync-text').textContent=msg;
+  const btn=document.getElementById('btn-connect');
+  if(state==='ok'){btn.className='connected';btn.textContent='✅ Conectado';}
+}
+
+// ═══════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════
+function renderAll(){
+  renderAzul();
+  renderVerde();
+  renderAmarela();
+  renderLaranja();
+  renderEmerg('emerg1','leitos-emerg1');
+  renderEmerg('emerg2','leitos-emerg2');
+  renderPed();
+  renderPorta();
+  updateStats();
+}
+
+// Faz elemento de leito fixo
+function makeBed(leitoId,opts){
+  const el  = document.createElement('div');
+  const row = bedData[leitoId];
+  if (row){
+    const _iso = (()=>{
+      const k=Object.keys(row).find(k=>
+        k==='isolamento'||(k.includes('isolamento')&&!k.includes('consultorio')&&!k.includes('setor'))
+      );
+      return (k&&row[k]&&row[k].toLowerCase()!=='false')?row[k]:(row['precaucao']||row['precaução']||'');
+    })();
+    const ic = classifyIso(_iso);
+    const _vclass=opts&&opts.vert?(' '+(opts.vert)):''; el.className='leito ocupado'+_vclass+(ic!=='none'?' '+ic:'');
+    // MEWS — determina área para limiar correto
+    const _areaEl = row._area||'';
+    const _isAltoRisco = ['laranja','emerg1','emerg2','iso'].includes(_areaEl);
+    const _mewsV = parseFloat(row['mews']||0)||0;
+    const _limiar = _isAltoRisco ? 5 : 3;
+    if(_mewsV >= 5) el.classList.add('mews-critico');
+    else if(_mewsV >= _limiar) el.classList.add('mews-alerta');
+    // Ícone poltrona/consultório (setor 1)
+    const _poltrona = row['poltronas__somente_setor_1_']||row['poltronas']||'';
+    const _consult  = row['consultorios_isolamentos__setor_1_setor_4_']||'';
+    const _isPolt   = _poltrona.toLowerCase()==='true';
+    const _isCons   = _consult.toLowerCase()==='true';
+    const _iconEsp  = _isPolt?'<span class="leito-icon" title="Poltrona">🪑</span>':
+                      _isCons?'<span class="leito-icon" title="Consultório">🚪</span>':'';
+    el.innerHTML=_iconEsp+
+      (ic==='multi'?'<span class="leito-warn">⚠️</span>':'')+
+      `<span class="leito-label">${leitoId}</span>`;
+    el.dataset.agenda=(row['agenda']||'').toUpperCase();
+    // VM/O2 — válido apenas para emerg1, emerg2, iso, laranja
+    const _areaVM = row._area||'';
+    const _vmRaw  = row['vm__emerg_e_setor_4__o2__setor_2_e_3_']||
+                    row['vm_o2__considerar_o2_apenas_no_setor_2_e_3_']||
+                    row['vm_o2']||'';
+    const _vmAtivo = ['emerg1','emerg2','iso','laranja'].includes(_areaVM) &&
+                     (_vmRaw.toLowerCase()==='true'||_vmRaw.toLowerCase()==='sim');
+    el.dataset.vm = _vmAtivo ? 'sim' : 'nao';
+    el.addEventListener('mouseenter',e=>showTooltip(e,row,leitoId));
+    el.addEventListener('mousemove', moveTooltip);
+    el.addEventListener('mouseleave',hideTooltip);
+  } else {
+    const _vclassL=opts&&opts.vert?(' '+(opts.vert)):''; el.className='leito livre'+_vclassL;
+    el.innerHTML=`<span class="leito-label">${leitoId}</span>`;
+    el.title='Leito desocupado';
+  }
+  return el;
+}
+
+// Faz elemento de leito extra (dados do censo, sem ID fixo)
+function makeExtraBed(row,idx,opts2){
+  const el = document.createElement('div');
+  const raw = (row['ala']||'').trim();
+  const lm  = raw.match(/LEITO\s*:\s*(\S+)/i);
+  const lid = lm ? lm[1].toUpperCase() : 'EX'+(idx+1);
+  const _isoEx = (()=>{
+    const k=Object.keys(row).find(k=>
+      k==='isolamento'||(k.includes('isolamento')&&!k.includes('consultorio')&&!k.includes('setor'))
+    );
+    return (k&&row[k]&&row[k].toLowerCase()!=='false')?row[k]:(row['precaucao']||row['precaução']||'');
+  })();
+  const ic  = classifyIso(_isoEx);
+  const _vEx=opts2&&opts2.vert?(' '+opts2.vert):''; el.className='leito ocupado'+_vEx+(ic!=='none'?' '+ic:'');
+  const _areaEx2 = row._area||'';
+  const _isAltoRiscoEx = ['laranja','emerg1','emerg2','iso'].includes(_areaEx2);
+  const _mewsEx = parseFloat(row['mews']||0)||0;
+  const _limiarEx = _isAltoRiscoEx ? 5 : 3;
+  if(_mewsEx >= 5) el.classList.add('mews-critico');
+  else if(_mewsEx >= _limiarEx) el.classList.add('mews-alerta');
+  const _poltEx = row['poltronas__somente_setor_1_']||row['poltronas']||'';
+  const _consEx  = row['consultorios_isolamentos__setor_1_setor_4_']||'';
+  const _iconEx  = _poltEx.toLowerCase()==='true'?'<span class="leito-icon" title="Poltrona">🪑</span>':
+                   _consEx.toLowerCase()==='true'?'<span class="leito-icon" title="Consultório">🚪</span>':'';
+  el.innerHTML=_iconEx+
+    (ic==='multi'?'<span class="leito-warn">⚠️</span>':'')+
+    `<span class="leito-label">${lid}</span>`;
+  el.dataset.agenda=(row['agenda']||'').toUpperCase();
+  const _areaVMex = row._area||'';
+  const _vmRawEx  = row['vm__emerg_e_setor_4__o2__setor_2_e_3_']||
+                    row['vm_o2__considerar_o2_apenas_no_setor_2_e_3_']||
+                    row['vm_o2']||'';
+  const _vmAtivoEx= ['emerg1','emerg2','iso','laranja'].includes(_areaVMex) &&
+                    (_vmRawEx.toLowerCase()==='true'||_vmRawEx.toLowerCase()==='sim');
+  el.dataset.vm = _vmAtivoEx ? 'sim' : 'nao';
+  el.addEventListener('mouseenter',e=>showTooltip(e,row,lid));
+  el.addEventListener('mousemove', moveTooltip);
+  el.addEventListener('mouseleave',hideTooltip);
+  return el;
+}
+
+function appendExtras(area,container,opts2){
+  const sorted=[...(extrasData[area]||[])].sort((a,b)=>{
+    const la=a._leitoId||'';const lb=b._leitoId||'';
+    return la.localeCompare(lb);
+  });
+  sorted.forEach((row,i)=>container.appendChild(makeExtraBed(row,i,opts2)));
+}
+
+// AZUL — grid livre
+function renderAzul(){
+  const c=document.getElementById('leitos-azul');
+  c.innerHTML='';
+  FIXOS.azul.forEach(lid=>c.appendChild(makeBed(lid)));
+  appendExtras('azul',c);
+}
+
+// VERDE — fileira horizontal
+function renderVerde(){
+  const c=document.getElementById('s2-row1');
+  c.innerHTML='';
+  FIXOS.verde.forEach(lid=>c.appendChild(makeBed(lid)));
+  appendExtras('verde',c);
+}
+
+// AMARELA — 2 fileiras + extras
+function renderAmarela(){
+  const r1=document.getElementById('s3-row1');
+  const r2=document.getElementById('s3-row2');
+  r1.innerHTML=''; r2.innerHTML='';
+  FIXOS.amarela1.forEach(lid=>r1.appendChild(makeBed(lid,{vert:'vert-up'})));
+  // Fileira 2: S3EXE alinhado sob A, espaço, espaço, S3EXF sob D
+  r2.appendChild(makeBed('S3EXE',{vert:'vert-up'}));
+  for(let i=0;i<2;i++){
+    const sp=document.createElement('div');
+    sp.style.cssText='width:56px;height:44px;visibility:hidden';
+    r2.appendChild(sp);
+  }
+  r2.appendChild(makeBed('S3EXF',{vert:'vert-up'}));
+  appendExtras('amarela',r2,{vert:'vert-up'});
+}
+
+// LARANJA — isolamento A-B + pares C-D, E-F...
+function renderLaranja(){
+  const iso=document.getElementById('leitos-iso');
+  iso.innerHTML='';
+  FIXOS.iso.forEach(lid=>iso.appendChild(makeBed(lid,{vert:'vert-up'})));
+
+  const c=document.getElementById('leitos-laranja');
+  c.innerHTML='';
+  const pares=[['SET4C','SET4D'],['SET4E','SET4F'],['SET4G','SET4H'],['SET4I','SET4J']];
+  pares.forEach(par=>{
+    const div=document.createElement('div');
+    div.className='leitos-s4-par';
+    par.forEach(lid=>div.appendChild(makeBed(lid,{vert:'vert-up'})));
+    c.appendChild(div);
+  });
+  // Extras laranja em pares também
+  const exL=[...(extrasData['laranja']||[])].sort((a,b)=>(a._leitoId||'').localeCompare(b._leitoId||''));
+  for(let i=0;i<exL.length;i+=2){
+    const div=document.createElement('div');
+    div.className='leitos-s4-par';
+    div.appendChild(makeExtraBed(exL[i],i,{vert:'vert-up'}));
+    if(exL[i+1]) div.appendChild(makeExtraBed(exL[i+1],i+1,{vert:'vert-up'}));
+    c.appendChild(div);
+  }
+}
+
+// EMERGÊNCIAS — 2 linhas x 3 colunas (cabeceiras para as paredes longas)
+// Linha 1: A, C, E (parede esquerda → direita)
+// Linha 2: B, D, F
+function renderEmerg(area,containerId){
+  const c=document.getElementById(containerId);
+  c.innerHTML='';
+  const fixos=FIXOS[area];
+  const exRows=[...(extrasData[area]||[])].sort((a,b)=>(a._leitoId||'').localeCompare(b._leitoId||''));
+
+  // Grid fixo: 2 linhas x 3 colunas (ordem invertida A-B à direita)
+  const grid=document.createElement('div');
+  grid.className='leitos-emerg-grid';
+  const linha1=[4,2,0]; // vert-up: E,C,A
+  const linha2=[5,3,1]; // vert-dn: F,D,B
+  [...linha1,...linha2].forEach((idx,pos)=>{
+    const vert=pos<3?'vert-up':'vert-dn';
+    if(idx<fixos.length) grid.appendChild(makeBed(fixos[idx],{vert}));
+  });
+  c.appendChild(grid);
+
+  // Extras (INT UNF e outros) — aparecem abaixo do grid fixo se ocupados
+  if(exRows.length>0){
+    const extraWrap=document.createElement('div');
+    extraWrap.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:6px';
+    exRows.forEach((row,i)=>extraWrap.appendChild(makeExtraBed(row,i,{vert:'vert-up'})));
+    c.appendChild(extraWrap);
+  }
+}
+
+// PEDIÁTRICA — leitos fixos + contagem da aba Contagens
+function renderPed(){
+  const c=document.getElementById('leitos-ped');
+  c.innerHTML='';
+  FIXOS.ped.forEach((lid,i)=>{
+    const el=makeBed(lid);
+    // Se não há dado do censo mas cabe na contagem → ocupado anônimo
+    if(!bedData[lid]&&i<pedCount){
+      el.className='leito ocupado';
+      el.title='Leito pediátrico ocupado (contagem via aba Contagens)';
+    }
+    c.appendChild(el);
+  });
+  const info=document.getElementById('ped-info');
+  if(info) info.textContent=pedCount>0?`${pedCount} internado(s)`:'';
+}
+
+
+// ── Tempo na porta ──────────────────────────────────────────
+function calcTempoPorta(row){
+  // Tenta data_de_entrada ou data_da_solicitacao
+  const raw = row['data_de_entrada']||'';
+  if(!raw) return null;
+  // Formatos: "17/04/2026 09:31:39" ou "17/04/2026"
+  const parts = raw.split(' ');
+  const datePart = parts[0]; // dd/mm/yyyy
+  const timePart = parts[1]||'00:00:00';
+  const [d,m,y] = datePart.split('/');
+  const dt = new Date(`${y}-${m}-${d}T${timePart}`);
+  if(isNaN(dt)) return null;
+  return (Date.now() - dt.getTime()) / 3600000; // horas
+}
+
+function tempoLabel(h){
+  if(h===null) return '';
+  if(h<1) return Math.round(h*60)+'min';
+  return h.toFixed(1).replace('.',',')+'h';
+}
+
+// PORTA — lista lateral
+function renderPorta(){
+  const lista=document.getElementById('porta-lista');
+  const count=document.getElementById('porta-count');
+  lista.innerHTML='';
+  count.textContent='';
+
+  // Aplica filtro de agenda se ativo
+  const fAg=(document.getElementById('f-agenda')||{value:''}).value;
+  const dados=fAg?portaData.filter(r=>(r['agenda']||'').toUpperCase()===fAg):portaData;
+
+  if(dados.length===0){
+    lista.innerHTML='<span class="porta-empty">'+(portaData.length?'Nenhum resultado para o filtro':'Nenhum paciente na porta')+'</span>';
+    document.getElementById('s-porta').textContent=portaData.length;
+    return;
+  }
+
+  count.textContent=dados.length+' paciente(s)';
+  document.getElementById('s-porta').textContent=portaData.length;
+
+  // Agrupa por agenda
+  const grupos={};
+  dados.forEach(row=>{
+    const ag=(row['agenda']||'S/AGENDA').toUpperCase();
+    if(!grupos[ag]) grupos[ag]=[];
+    grupos[ag].push(row);
+  });
+
+  Object.entries(grupos).sort(([a],[b])=>a.localeCompare(b)).forEach(([ag,pacs])=>{
+    const g=document.createElement('div');
+    g.className='porta-agenda-grupo';
+    const lbl=document.createElement('div');
+    lbl.className='porta-agenda-label';
+    lbl.textContent=ag;
+    g.appendChild(lbl);
+    pacs.forEach(row=>{
+      const horas=calcTempoPorta(row);
+      const isCrit=horas!==null&&horas>=24;
+      const isWarn=horas!==null&&horas>=12&&!isCrit;
+      const p=document.createElement('div');
+      p.className='porta-paciente'+(isCrit?' porta-crit':isWarn?' porta-warn':'');
+      const icon=isCrit?'🔴 ':isWarn?'⚠️ ':'';
+      const tempoH=horas!==null?`<div class="porta-tempo ${isCrit?'crit':isWarn?'warn':''}">${icon}${tempoLabel(horas)} na porta</div>`:'';
+      p.innerHTML=`<div class="porta-nome">${icon}${row['nome']||'—'}</div>`+
+                  `<div class="porta-hc">HC: ${row['hc']||'—'}</div>`+tempoH;
+      g.appendChild(p);
+    });
+    lista.appendChild(g);
+  });
+
+  // Popula select de agenda
+  popularFiltroAgenda();
+}
+
+
+// ── Filtros ──────────────────────────────────────────────────
+function popularFiltroAgenda(){
+  const sel=document.getElementById('f-agenda');
+  if(!sel) return;
+  const cur=sel.value;
+  const agendas=new Set();
+  // Todos os pacientes: leitos fixos + extras + porta
+  const todos=[...Object.values(bedData),...Object.values(extrasData).flat(),...portaData];
+  todos.forEach(r=>{ if(r['agenda']) agendas.add(r['agenda'].toUpperCase()); });
+  sel.innerHTML='<option value="">Todas</option>';
+  [...agendas].sort().forEach(ag=>{
+    const o=document.createElement('option');
+    o.value=ag; o.textContent=ag;
+    sel.appendChild(o);
+  });
+  sel.value=cur;
+}
+
+function aplicarFiltros(){
+  const fIso   =(document.getElementById('f-iso')   ||{value:''}).value.trim();
+  const fAgenda=(document.getElementById('f-agenda') ||{value:''}).value.trim();
+  const fVm    =(document.getElementById('f-vm')    ||{value:''}).value.trim();
+  const filtroAtivo = fIso || fAgenda || fVm;
+
+  document.querySelectorAll('#uer-map .leito').forEach(el=>{
+    const cls    = [...el.classList];
+    const isOcup = cls.includes('ocupado');
+    const isLivre= cls.includes('livre');
+
+    // Pausa animação MEWS quando filtro ativo
+    if(filtroAtivo){
+      el.style.animationPlayState = 'paused';
+      el.style.animationName = 'none'; // força reset da animação
+    } else {
+      el.style.animationPlayState = '';
+      el.style.animationName = '';
+    }
+
+    // Sem filtro: mostrar tudo
+    if(!filtroAtivo){
+      el.style.opacity='1';
+      return;
+    }
+
+    // Leitos livres: sempre opacos com filtro ativo
+    if(isLivre){
+      el.style.opacity='0.12';
+      return;
+    }
+
+    let show = true;
+
+    // Filtro por isolamento
+    if(fIso && isOcup){
+      show =
+        (fIso==='iso-unico' && cls.includes('iso-unico')) ||
+        (fIso==='tbc'       && cls.includes('tbc'))       ||
+        (fIso==='multi'     && cls.includes('multi'))     ||
+        (fIso==='none'      && !cls.includes('iso-unico') && !cls.includes('tbc') && !cls.includes('multi'));
+    }
+
+    // Filtro por agenda
+    if(fAgenda && isOcup){
+      const agEl = (el.dataset.agenda||'').toUpperCase().trim();
+      show = show && (agEl !== '' ? agEl === fAgenda.toUpperCase() : false);
+    }
+
+    // Filtro VM — só emerg1, emerg2, iso, laranja
+    if(fVm && isOcup){
+      show = show && (el.dataset.vm === 'sim');
+    }
+
+    el.style.opacity = show ? '1' : '0.12';
+  });
+  renderPorta();
+}
+
+function limparFiltros(){
+  const fa=document.getElementById('f-agenda');
+  const fi=document.getElementById('f-iso');
+  const fv=document.getElementById('f-vm');
+  if(fa) fa.value='';
+  if(fi) fi.value='';
+  if(fv) fv.value='';
+  aplicarFiltros();
+}
+
+// ═══════════════════════════════════════════
+//  TOOLTIP
+// ═══════════════════════════════════════════
+const tooltip=document.getElementById('tooltip');
+
+function boolPT(v){
+  if(!v) return '—';
+  const s=v.toLowerCase().trim();
+  if(s==='true'||s==='sim'||s==='s') return 'Sim';
+  if(s==='false'||s==='não'||s==='nao'||s==='n') return 'Não';
+  return v;
+}
+
+function showTooltip(e,row,leitoId){
+  const nome  =row['nome']||'—';
+  const hc    =row['hc']||'—';
+  const agenda=row['agenda']||'—';
+  const diag  =row['diagnostico_atual']||'—';
+  const esp   =row['especialidade']||'';
+  const tipoL =row['tipo_leito']||'';
+  const solict=[esp,tipoL].filter(Boolean).join(' · ')||'—';
+  const mews  =row['mews']||'—';
+  // Busca coluna de isolamento — exclui "consultórios/isolamentos" que é outra coisa
+  function getIso(r){
+    // Procura chave exata 'isolamento' que NÃO contenha 'consultorio'
+    const exactKey = Object.keys(r).find(k=>
+      k==='isolamento' || (k.includes('isolamento') && !k.includes('consultorio') && !k.includes('setor'))
+    );
+    if(exactKey && r[exactKey] && r[exactKey].toLowerCase()!=='false') return r[exactKey];
+    // Tenta variações
+    return r['precaucao']||r['precaução']||r['tipo_isolamento']||'Nenhum';
+  }
+  const iso = getIso(row);
+  const vm    =boolPT(row['vm__emerg_e_setor_4__o2__setor_2_e_3_']||
+               row['vm_o2__considerar_o2_apenas_no_setor_2_e_3_']||
+               row['vm_o2']||'');
+  const mon   =boolPT(row['monitor_bic_dva']||row['monitor']||'');
+  const hd    =boolPT(row['hemodialise']||'');
+  const dt    =row['data_de_entrada']||'—';
+  const isoC  =classifyIso(iso); // usa valor bruto completo
+  const isoBg =isoC==='tbc'?'#7a1010':isoC==='iso-unico'?'#006b7a':isoC==='multi'?'#222':'#2a3a50';
+  const mewsN =parseFloat(mews)||0;
+  const mewsC =mewsN>=5?'#e74c3c':mewsN>=3?'#f39c12':'#27ae60';
+
+  tooltip.innerHTML=
+    `<div class="tt-row"><strong>${nome}</strong> <span style="color:#445566;font-size:0.68rem">HC: ${hc}</span></div>`+
+    `<div class="tt-row"><span class="tt-lbl">Leito: </span>${leitoId} · Entrada: ${dt}</div>`+
+    `<div class="tt-sep"></div>`+
+    `<div class="tt-row"><span class="tt-lbl">Agenda: </span><span class="tt-agenda">${agenda}</span></div>`+
+    `<div class="tt-row"><span class="tt-lbl">Diagnóstico: </span>${diag}</div>`+
+    `<div class="tt-row"><span class="tt-lbl">Leito solicitado: </span>${solict}</div>`+
+    `<div class="tt-sep"></div>`+
+    `<div class="tt-row"><span class="tt-lbl">MEWS: </span><strong style="color:${mewsC}">${mews}</strong></div>`+
+    `<div class="tt-row"><span class="tt-lbl">VM/O₂: </span>${vm} · <span class="tt-lbl">Monitor: </span>${mon} · <span class="tt-lbl">HD: </span>${hd}</div>`+
+    `<div class="tt-sep"></div>`+
+    `<div class="tt-row"><span class="tt-lbl">Isolamento: </span>`+
+    (isoC!=='none'
+      ?`<span class="tt-badge" style="background:${isoBg};white-space:normal;display:inline-block;max-width:270px;line-height:1.3">${iso}</span>`
+      :iso)+`</div>`;
+
+  tooltip.classList.remove('hidden');
+  moveTooltip(e);
+}
+function moveTooltip(e){
+  let x=e.clientX+16,y=e.clientY+16;
+  if(x+320>window.innerWidth)  x=e.clientX-320;
+  if(y+240>window.innerHeight) y=e.clientY-240;
+  tooltip.style.left=x+'px'; tooltip.style.top=y+'px';
+}
+function hideTooltip(){ tooltip.classList.add('hidden') }
+
+// ═══════════════════════════════════════════
+//  STATS
+// ═══════════════════════════════════════════
+function updateStats(){
+  // Total de leitos fixos da UER excluindo pediátrica
+  const TOTAL_FIXOS = 50;
+
+  // Conta leitos ocupados e de isolamento (excluindo pediátrica)
+  const allSemPed=document.querySelectorAll('#uer-map .leito:not(.ped-leito)');
+  let ocup=0,iso=0,tbc=0,multi=0;
+  allSemPed.forEach(b=>{
+    // Excluir leitos da área pediátrica pelo dataset
+    if((b.dataset.posto||b.dataset.area||'').includes('ped')) return;
+    if(!b.classList.contains('livre')){
+      ocup++;
+      if(b.classList.contains('iso-unico')) iso++;
+      else if(b.classList.contains('tbc'))  tbc++;
+      else if(b.classList.contains('multi'))multi++;
+    }
+  });
+
+  // Livre: max(TOTAL_FIXOS - ocupados, 0)
+  // Se há mais pacientes que leitos fixos → 0 (superlotação)
+  const livre = Math.max(TOTAL_FIXOS - ocup, 0);
+
+  document.getElementById('s-total').textContent=TOTAL_FIXOS;
+  document.getElementById('s-ocup').textContent=ocup;
+  document.getElementById('s-livre').textContent=livre;
+  document.getElementById('s-iso').textContent=iso;
+  document.getElementById('s-tbc').textContent=tbc;
+  document.getElementById('s-multi').textContent=multi;
+  document.getElementById('s-porta').textContent=portaData.length;
+}
+
+// ═══════════════════════════════════════════
+//  TIMER
+// ═══════════════════════════════════════════
+function startTimer(){
+  if(timerInt) clearInterval(timerInt);
+  timerCountdown=INTERVAL_MS/1000;
+  timerInt=setInterval(()=>{
+    timerCountdown--;
+    const pct=(timerCountdown/(INTERVAL_MS/1000))*100;
+    document.getElementById('timer-fill').style.width=pct+'%';
+    const m=Math.floor(timerCountdown/60),s=timerCountdown%60;
+    document.getElementById('next-update').textContent=m+':'+String(s).padStart(2,'0');
+    if(timerCountdown<=0){timerCountdown=INTERVAL_MS/1000;fetchAll();}
+  },1000);
+}
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+
+// ── Autenticação ──────────────────────────────────────────────
+// Para alterar a senha, gere um novo hash no console do browser:
+//   hashSenha('novasenha').then(h => console.log(h))
+// Senha atual: HCUNICAMP2026
+const SENHA_HASH = '0a1b2c3d'; // placeholder — sobrescrito pela verificação abaixo
+
+async function hashSenha(s){
+  const buf = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+async function tentarLogin(){
+  const input=document.getElementById('login-pass');
+  const erro =document.getElementById('login-error');
+  const senha=input.value.trim();
+  if(!senha){erro.textContent='Digite a senha.';return;}
+  const hash=await hashSenha(senha);
+  const hashOK=await hashSenha('HCUNICAMP2026');
+  if(hash===hashOK){
+    sessionStorage.setItem('uer_auth','1');
+    document.getElementById('login-screen').classList.add('hidden');
+    erro.textContent='';
+    if(apiKey) fetchAll();
+    else setSyncStatus('error','Conecte o Google Sheets');
+  } else {
+    erro.textContent='Senha incorreta.';
+    input.value=''; input.focus();
+    input.style.animation='shake 0.4s';
+    setTimeout(()=>input.style.animation='',400);
+  }
+}
+
+function verificarAuth(){
+  return sessionStorage.getItem('uer_auth')==='1';
+}
+
+window.addEventListener('DOMContentLoaded',()=>{
+  renderAll(); // mostra leitos vazios
+  if(verificarAuth()){
+    // Sessão já autenticada
+    if(apiKey){ document.getElementById('input-apikey').value=apiKey; fetchAll(); }
+    else setSyncStatus('error','Conecte o Google Sheets');
+  }
+  // Senão: tela de login permanece visível — fetchAll chamado após login
+});
+</script>
+</body>
+</html>
